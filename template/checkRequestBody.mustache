@@ -1,0 +1,11 @@
+    for(const key in {{name}}){
+        if({{#properties}}key !== '{{name}}' && {{/properties}}true){
+            responseBody.status = 400;
+            responseBody.message = "invalid data";
+            return {
+                statusCode: responseBody.status,
+                body: JSON.stringify(responseBody),
+                headers: {'Access-Control-Allow-Origin': '*',}
+            };
+        }
+    }

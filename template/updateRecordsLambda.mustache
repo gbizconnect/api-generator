@@ -1,0 +1,90 @@
+const { DynamoDBClient, GetItemCommand, PutItemCommand, BatchWriteItemCommand } = require("@aws-sdk/client-dynamodb");
+const { marshall } = require("@aws-sdk/util-dynamodb");
+
+const DDB_TABLE = process.env['DDB_TABLE'];
+const config =  {region:  "ap-northeast-1"};
+const client = new DynamoDBClient(config);
+
+const parser = require('lambda-multipart-parser');
+const {parse} = require('csv-parse/sync');
+const Encoding = require('encoding-japanese');
+
+exports.handler = async(event, context, callback) => {
+    let responseBody = {
+        status: 500,
+        message: "Internal Server Error",
+    }
+    
+    try{
+    
+       // multipart/form-data形式のパラメータをパース
+        const req = await parser.parse(event);
+        const csvfile = req.files[0].content;
+        const updateflg = req.update;
+
+        // 文字コード自動検出
+        const detected = Encoding.detect(csvfile);
+        // UTF8へ変換
+        const convertedFile = Encoding.convert(csvfile, 'UTF8', detected);
+        // 変換後に文字コード配列になっている為、Bufferに戻す
+        const data = Buffer.from(convertedFile);
+        
+        const records = parse(data, {
+            delimiter: ",",
+            trim: true,
+            bom: true,
+            skip_empty_lines: true,
+            from_line: 1,
+            columns: true
+        });
+
+        for(let record of records) {
+    {{#properties}}
+        {{^isString}}
+            record.{{ property_name }} = Number(record.{{ property_name }}); 
+        {{/isString}}
+    {{/properties}}
+        
+            let input = {};
+            
+            if(updateflg === "true") {
+                input = {
+                    "Item": marshall(record),
+                    "TableName": DDB_TABLE,
+                }
+            } else {
+                input = {
+                    "Item": marshall(record),
+                    "TableName": DDB_TABLE,
+    {{#properties}}
+        {{#isPrimaryKey}}
+                    ConditionExpression: 'attribute_not_exists({{ property_name }})', 
+        {{/isPrimaryKey}}
+    {{/properties}}
+                }
+            }
+            
+            const command = new PutItemCommand(input);
+            
+            try {
+                const response = await client.send(command);
+            }catch(e) {
+                //todo
+            }
+        }
+
+        responseBody.status = 200;
+        responseBody.message = "succeeded";
+    }catch(e){
+        if(e.$response && e.$response.statusCode){
+            responseBody.status = e.$response.statusCode
+            responseBody.message = e.message;
+        }
+    }
+    
+    return {
+        statusCode: responseBody.status,
+        body: JSON.stringify(responseBody),
+        headers: {'Access-Control-Allow-Origin': '*',}
+    };
+}

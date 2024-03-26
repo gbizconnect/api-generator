@@ -1,0 +1,275 @@
+// const axios = require("axios");
+import axios, { AxiosRequestConfig, AxiosResponse, AxiosError } from "axios";
+
+
+const FormData = require('form-data');
+const fs = require('fs');
+
+
+const baseUrl = "https://your_domain.auth.ap-northeast-1.amazoncognito.com/model";
+
+const resource{{model}} = "/{{model}}";
+{{#pk.isString}}
+let nonExistent{{model}}{{pk.property}} = "nonExistent{{model}}{{pk.property}}";
+{{/pk.isString}}
+{{^pk.isString}}
+let nonExistent{{model}}{{pk.property}} = "874512369024680135791592634870";
+{{/pk.isString}}
+
+{{#isExistSortKey}}
+nonExistent{{model}}{{pk.property}} += "/" + {{#sk.isString}}"abcd"{{/sk.isString}}{{^sk.isString}}1234{{/sk.isString}};
+{{/isExistSortKey}}
+
+{{#isAuth}}
+const correctAuthId = "{{ id }}";
+const correctAuthPassword = "{{ password }}";
+const wrongAuthPassword = "wrong{{ password }}";
+const encodedcorrectAuthIdPassword = Buffer.from(correctAuthId + ":" + correctAuthPassword, "utf-8").toString("base64");
+const encodedWrongAuthPassword = Buffer.from(correctAuthId + ":" + wrongAuthPassword, "utf-8").toString("base64");
+const correctHeaders = {headers: {
+    "Content-Type": "application/json",
+    "Authorization": "Basic " + encodedcorrectAuthIdPassword,
+}}
+
+const wrongHeaders = {headers: {
+    "Content-Type": "application/json",
+    "Authorization": "Basic " + encodedWrongAuthPassword,
+}}
+
+const multipartAuthHeaders = {headers: {
+    "Content-Type": "multipart/form-data",
+    "Authorization": "Basic " + encodedcorrectAuthIdPassword,
+}}
+const multipartHeaders = {headers: {
+    "Content-Type": "multipart/form-data",
+}}
+{{/isAuth}}
+
+//登録・参照するデータ
+const {{model}}1 = {
+{{#properties}}
+    {{#isString}}
+    {{property_name}}: "{{example}}",
+    {{/isString}}
+    {{^isString}}
+    {{property_name}}: {{example}},
+    {{/isString}}
+{{/properties}}
+}
+const cannotRegister{{model}} = {}
+
+//更新するデータ
+
+//検索条件
+const searchCondition = {
+    "condition": "1=1{{#properties}}{{#isString}} AND {{property_name}} = '{{example}}'{{/isString}}{{^isString}} AND {{property_name}} = {{example}}{{/isString}}{{/properties}}"
+}
+
+
+//レスポンス期待値
+const postSuccessResponse = { status: 200, message: 'succeeded' };
+const getSuccessResponse = { status: 200, message: 'succeeded', data: {{model}}1 };
+{{#isAuth}}
+const unauthorizedResponse = { status: 401, message: 'Unauthorized' };
+{{/isAuth}}
+const dataNotFoundResponse = { status: 404, message: 'data not found', data: {} };
+const internalServerError = { status: 500, message: "Internal Server Error" };
+const patchSuccessResponse = { status: 200, message: 'succeeded' };
+const deleteSuccessResponse = { status: 200, message: 'succeeded' };
+const searchSuccessResponse = { status: 200, message: 'succeeded', data: [{{model}}1] };
+const importSuccessResponse = { status: 200, message: 'succeeded' };
+
+{{#isAuthUpdate}}
+test("test_post_unauthorized", async () => {
+    const url = baseUrl + resource{{model}};
+    await axios.post(url , {{model}}1, wrongHeaders)
+    .then(function (response) {
+        console.log("[test_post_unauthorized] failed");
+        expect(true).toBe(false);
+    })
+    .catch(function (error) {
+        expect(error.response.status).toBe(401);
+        expect(error.response.data).toEqual(unauthorizedResponse);
+    });
+});
+{{/isAuthUpdate}}
+
+{{#isAuthRef}}
+test("test_get_unauthorized", async () => {
+    const url = baseUrl + resource{{model}} + "/" + {{ model }}1.{{pk.property}};
+    await axios.get(url, wrongHeaders)
+    .then(function (response) {
+        console.log("[test_get_unauthorized] failed");
+        expect(true).toBe(false);
+    })
+    .catch(function (error) {
+        expect(error.response.status).toBe(401);
+        expect(error.response.data).toEqual(unauthorizedResponse);
+    });
+});
+{{/isAuthRef}}
+
+test("test_get_data_not_found", async () => {
+    const url = baseUrl + resource{{model}} + "/" + nonExistent{{model}}{{pk.property}};
+{{#isAuthRef}}
+    await axios.get(url, correctHeaders)
+{{/isAuthRef}}
+{{^isAuthRef}}
+    await axios.get(url)
+{{/isAuthRef}}
+    .then(function (response) {
+        console.log("[test_get_data_not_found] failed");
+        expect(true).toBe(false);
+    })
+    .catch(function (error) {
+        expect(error.response.status).toBe(404);
+        expect(error.response.data).toEqual(dataNotFoundResponse);
+    });
+});
+
+test("test_post_success", async () => {
+    const url = baseUrl + resource{{model}};
+{{#isAuthUpdate}}
+    await axios.post(url , {{ model }}1, correctHeaders)
+{{/isAuthUpdate}}
+{{^isAuthUpdate}}
+    await axios.post(url , {{ model }}1)
+{{/isAuthUpdate}}
+    .then(function (response) {
+        expect(response.status).toBe(201);
+        expect(response.data).toEqual(postSuccessResponse);
+    })
+    .catch(function (error) {
+        console.log("[test_post_success] failed");
+        expect(true).toBe(false);
+    });
+});
+
+test("test_get_success", async () => {
+    let url = baseUrl + resource{{model}} + "/" + {{ model }}1.{{pk.property}};
+    
+{{#isExistSortKey}}
+    url += "/" + {{ model }}1.{{sk.property}};
+{{/isExistSortKey}}
+
+{{#isAuthRef}}
+    await axios.get(url, correctHeaders)
+{{/isAuthRef}}
+{{^isAuthRef}}
+    await axios.get(url)
+{{/isAuthRef}}
+    .then(function (response) {
+        expect(response.status).toBe(200);
+        expect(response.data).toEqual(getSuccessResponse);
+    })
+    .catch(function (error) {
+        console.log("[test_get_success] failed");
+        expect(true).toBe(false);
+    });
+});
+
+test("test_post_500", async () => {
+    const url = baseUrl + resource{{model}};
+{{#isAuthUpdate}}
+    await axios.post(url , cannotRegister{{model}}, correctHeaders)
+{{/isAuthUpdate}}
+{{^isAuthUpdate}}
+    await axios.post(url , cannotRegister{{model}})
+{{/isAuthUpdate}}
+    .then(function (response) {
+        console.log("[test_post_500] failed");
+        expect(true).toBe(false);
+    })
+    .catch(function (error) {
+        expect(error.response.status).toBe(500);
+        expect(error.response.data).toEqual(internalServerError);
+    });
+});
+
+test("test_patch_success", async () => {
+    let url = baseUrl + resource{{model}} + "/" + {{ model }}1.{{pk.property}};
+    
+{{#isExistSortKey}}
+    url += "/" + {{ model }}1.{{sk.property}};
+{{/isExistSortKey}}
+
+{{#isAuthUpdate}}
+    await axios.patch(url , {{ model }}1, correctHeaders)
+{{/isAuthUpdate}}
+{{^isAuthUpdate}}
+    await axios.patch(url , {{ model }}1)
+{{/isAuthUpdate}}
+    .then(function (response) {
+        expect(response.status).toBe(200);
+        expect(response.data).toEqual(patchSuccessResponse);
+    })
+    .catch(function (error) {
+        console.log("[test_patch_success] failed");
+        expect(true).toBe(false);
+    });
+});
+
+test("test_search_success", async () => {
+    let url = baseUrl + resource{{model}} + "/search";
+
+{{#isAuthUpdate}}
+    await axios.post(url , searchCondition, correctHeaders)
+{{/isAuthUpdate}}
+{{^isAuthUpdate}}
+    await axios.post(url, searchCondition)
+{{/isAuthUpdate}}
+    .then(function (response) {
+        expect(response.status).toBe(200);
+        expect(response.data).toEqual(searchSuccessResponse);
+    })
+    .catch(function (error) {
+        console.log("[test_search_success] failed");
+        expect(true).toBe(false);
+    });
+});
+
+test("test_delect_success", async () => {
+    let url = baseUrl + resource{{model}} + "/" + {{ model }}1.{{pk.property}};
+    
+{{#isExistSortKey}}
+    url += "/" + {{ model }}1.{{sk.property}};
+{{/isExistSortKey}}
+
+{{#isAuthUpdate}}
+    await axios.delete(url , correctHeaders)
+{{/isAuthUpdate}}
+{{^isAuthUpdate}}
+    await axios.delete(url)
+{{/isAuthUpdate}}
+    .then(function (response) {
+        expect(response.status).toBe(200);
+        expect(response.data).toEqual(deleteSuccessResponse);
+    })
+    .catch(function (error) {
+        console.log("[test_delete_success] failed");
+        expect(true).toBe(false);
+    });
+});
+
+test("test_import_success", async () => {
+    let url = baseUrl + resource{{model}} + "/import";
+
+    let form = new FormData();
+    form.append('update', 'true');
+    form.append('file', fs.createReadStream('../../../../test/{{model}}.csv'));    
+
+{{#isAuthUpdate}}
+    await axios.post(url, form, multipartAuthHeaders)
+{{/isAuthUpdate}}
+{{^isAuthUpdate}}
+    await axios.post(url, form, multipartHeaders)
+{{/isAuthUpdate}}
+    .then(function (response) {
+        expect(response.status).toBe(200);
+        expect(response.data).toEqual(importSuccessResponse);
+    })
+    .catch(function (error) {
+        console.log("[test_import_success] failed");
+        expect(true).toBe(false);
+    });
+});

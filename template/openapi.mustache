@@ -1,0 +1,274 @@
+openapi: 3.0.3
+info:
+  title: {{apiName}}
+  description: RESAT API of {{model}}
+  termsOfService: http://swagger.io/terms/
+  version: {{apiVersion}}
+servers:
+  - url: https://your_domain.auth.ap-northeast-1.amazoncognito.com/model
+tags:
+  - name: 更新系
+  - name: 参照系
+
+paths:
+  /{{model}}:
+    post:
+      tags:
+        - 更新系
+      summary: Add a new {{model}} to the database.
+      description: Add a new {{model}} to the database
+      operationId: add{{model}}
+      requestBody:
+        description: {{model}} data to be registered in the database
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/{{model}}'
+        required: true
+      responses:
+        '200':
+          description: Successfully registered data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WithoutDataResponse'
+        '400':
+          description: invalid search requestBody
+        '401':
+          description: Unauthorized
+        '500':
+          description: Internal Server Error
+    {{#isAuthUpdate}}
+      security:
+        - basicAuth: []
+    {{/isAuthUpdate}}
+    delete:
+      tags:
+        - 更新系
+      summary: Delete all {{model}} from database.
+      description: Delete all {{model}} from database
+      operationId: delete{{model}}
+      responses:
+        '200':
+          description: Successfully delete data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WithoutDataResponse'
+        '401':
+          description: Unauthorized
+        '500':
+          description: Internal Server Error
+    {{#isAuthUpdate}}
+      security:
+        - basicAuth: []
+    {{/isAuthUpdate}}
+            
+
+  /{{model}}/{{={% %}=}}{{%pk.property%}}{%={{ }}=%}{{#isExistSortKey}}/{{={% %}=}}{{%sk.property%}}{%={{ }}=%}{{/isExistSortKey}}:
+    parameters:
+      - name: {{ pk.property }}
+        in: path
+        description: {{ pk.property }} of {{model}} to return
+        required: true
+        schema:
+          type: {{pk.type}}
+    {{#isExistSortKey}}
+      - name: {{ sk.property }}
+        in: path
+        description: {{ sk.property }} of {{model}} to return
+        required: true
+        schema:
+          type: {{sk.type}}
+    {{/isExistSortKey}}
+    get:
+      tags:
+        - 参照系
+      summary: Find {{model}} by {{ pk.property }}{{#isExistSortKey}} and {{sk.property}}{{/isExistSortKey}}
+      description: Returns a single {{model}}
+      operationId: getBy{{ pk.property }}{{#isExistSortKey}} and {{sk.property}}{{/isExistSortKey}}
+            
+      responses:
+        '200':
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetSuccessResponse'
+        '401':
+          description: Unauthorized
+        '404':
+          description: {{model}} not found
+        '500':
+          description: Internal Server Error
+    {{#isAuthRef}}
+      security:
+        - basicAuth: []
+    {{/isAuthRef}}
+    
+    delete:
+      tags:
+        - 更新系
+      summary: delete {{model}} by {{ pk.property }}{{#isExistSortKey}} and {{sk.property}}{{/isExistSortKey}}
+      description: delete a single {{model}}
+      operationId: delete by {{ pk.property }}{{#isExistSortKey}} and {{sk.property}}{{/isExistSortKey}}
+            
+      responses:
+        '200':
+          description: successful operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WithoutDataResponse'
+        '401':
+          description: Unauthorized
+        '500':
+          description: Internal Server Error
+    {{#isAuthUpdate}}
+      security:
+        - basicAuth: []
+    {{/isAuthUpdate}}
+    
+    patch:
+      tags:
+        - 更新系
+      summary: Update a registered {{model}}.
+      description: Update a registered {{model}}.
+      operationId: update{{model}}
+      requestBody:
+        description: {{model}} data to be updated in the database
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/{{model}}'
+        required: true
+      responses:
+        '200':
+          description: Successfully updated data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WithoutDataResponse'
+        '400':
+          description: invalid data
+        '401':
+          description: Unauthorized
+        '404':
+          description: {{model}} not found
+        '500':
+          description: Internal Server Error
+    {{#isAuthUpdate}}
+      security:
+        - basicAuth: []
+    {{/isAuthUpdate}}
+    
+  /{{model}}/import:
+    post:
+      tags:
+        - 更新系
+      summary: import {{model}}
+      description: import {{model}}
+      operationId: import{{model}}
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                update:
+                  type: boolean
+                fileName:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: import succeeded
+        '400':
+          description: error
+        '401':
+          description: Unauthorized
+        '404':
+          description: {{model}} not found
+        '500':
+          description: Internal Server Error
+    {{#isAuthUpdate}}
+      security:
+        - basicAuth: []
+    {{/isAuthUpdate}}
+
+    
+  /{{model}}/search:
+    post:
+      tags:
+        - 参照系
+      summary: search {{model}}
+      description: search {{model}}
+      operationId: search{{model}}
+      requestBody:
+        description: conditions to search for {{model}}
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchCondtion'
+        required: false
+      responses:
+        '200':
+          description: search succeeded
+        '400':
+          description: invalid search condition
+        '401':
+          description: Unauthorized
+        '404':
+          description: {{model}} not found
+        '500':
+          description: Internal Server Error
+    {{#isAuthRef}}
+      security:
+        - basicAuth: []
+    {{/isAuthRef}}
+
+components:
+  schemas:
+    {{model}}:
+      required:
+        - {{ pk.property }}
+      properties:
+{{#properties}}
+        {{property_name}}:
+          type: {{type}}
+{{/properties}}
+    SearchCondtion:
+      type: object
+      properties:
+        condition:
+          type: string
+          example: "contains(strColumns, 'stringVal') AND numColumn > 1234567"
+    WithoutDataResponse:
+      type: object
+      properties:
+        status:
+          type: integer
+          format: int32
+          example: 201
+        message:
+          type: string
+          example: succeeded
+    GetSuccessResponse:
+      type: object
+      properties:
+        status:
+          type: integer
+          format: int32
+          example: 200
+        message:
+          type: string
+          example: succeeded
+        data:
+          type: object
+          $ref: '#/components/schemas/{{model}}'
+{{#isAuth}}
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+{{/isAuth}}

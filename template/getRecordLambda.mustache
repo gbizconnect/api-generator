@@ -1,0 +1,60 @@
+const { DynamoDBClient, GetItemCommand } = require("@aws-sdk/client-dynamodb");
+const { unmarshall } = require("@aws-sdk/util-dynamodb");
+
+const DDB_TABLE = process.env['DDB_TABLE'];
+const config =  {region:  "ap-northeast-1"};
+const client = new DynamoDBClient(config);
+
+exports.handler = async (event, context, callback) => {
+    
+    let responseBody = {
+        status: 500,
+        message: "Internal Server Error",
+        data: {},
+    }
+    
+    const {{ pk.property }} = decodeURIComponent(event.pathParameters.{{ pk.property }});
+    {{#isExistSortKey}}
+    const {{ sk.property }} = decodeURIComponent(event.pathParameters.{{ sk.property }});
+    {{/isExistSortKey}}
+
+    try{
+        const input = {
+            "Key": {
+                "{{ pk.property }}": {
+                    {{#pk.isString}}"S": {{ pk.property }}{{/pk.isString}}
+                    {{^pk.isString}}"N": `${ {{ pk.property }} }`{{/pk.isString}}
+                },
+                {{#isExistSortKey}}
+                "{{ sk.property }}": {
+                    {{#sk.isString}}"S": {{ sk.property }}{{/sk.isString}}
+                    {{^sk.isString}}"N": `${ {{ sk.property }} }`{{/sk.isString}}
+                },
+                {{/isExistSortKey}}
+            },
+            "TableName": DDB_TABLE
+        }
+    
+        const command = new GetItemCommand(input);
+        const response = await client.send(command);
+        
+        if(response.Item){
+            responseBody.status = 200;
+            responseBody.message = "succeeded";
+            responseBody.data = unmarshall(response.Item);
+        }else{
+            responseBody.status = 404;
+            responseBody.message = "data not found";
+        }
+    }catch(e){
+        if(e.$response && e.$response.statusCode){
+            responseBody.status = e.$response.statusCode
+            responseBody.message = e.message;
+        }
+    }
+    return {
+        statusCode: responseBody.status,
+        body: JSON.stringify(responseBody),
+        headers: {'Access-Control-Allow-Origin': '*',}
+    };
+};

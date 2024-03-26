@@ -1,0 +1,106 @@
+const { DescribeTableCommand,
+        DeleteTableCommand,
+        waitUntilTableNotExists,
+        CreateTableCommand,
+        DynamoDBClient, 
+    } = require("@aws-sdk/client-dynamodb");
+
+const DDB_TABLE = process.env['DDB_TABLE'];
+const config =  {region:  "ap-northeast-1"};
+const client = new DynamoDBClient(config);
+
+exports.handler = async (event) => {
+    const params = {
+        TableName: DDB_TABLE,
+    };
+    
+    let responseBody = {
+        status: 500,
+        message: "Internal Server Error",
+    }
+
+    try {
+        // テーブル情報を取得する
+        let tableInfo = await getTableInfo(params);
+        for(let i = 0; i < tableInfo.Table.GlobalSecondaryIndexes?.length; i++) {
+            delete tableInfo.Table.GlobalSecondaryIndexes[i].ProvisionedThroughput;
+        }
+        
+    
+        // delete実行
+        await deleteTable(params);
+
+        // 完全削除まで
+        await waitUntilTableNotExists({client: client}, {TableName: DDB_TABLE});
+
+        // create実行
+        await createTable(tableInfo);
+
+        responseBody.status = 200;
+        responseBody.message = "succeeded";
+    } catch (err) {
+        console.log(err);
+        
+        if(err.$response && err.$response.statusCode) {
+            responseBody.status = err.$response.statusCode
+            responseBody.message = err.message;
+        }
+    }
+    
+    return {
+        statusCode: responseBody.status,
+        body: JSON.stringify(responseBody),
+        headers: {'Access-Control-Allow-Origin': '*',}
+    };
+}
+
+/**
+ * DynamoDBの情報を取得する
+ * @param {*} params 
+ */
+const getTableInfo = async function(params) {
+    const command = new DescribeTableCommand({
+        TableName: params.TableName,
+    });
+    
+    const response = await client.send(command);
+
+    return response;    
+};
+
+/**
+ * DynamoDBを削除する
+ * @param {*} params 
+ */
+const deleteTable = async function(params) {
+
+    const command = new DeleteTableCommand({
+        TableName: params.TableName,
+    });
+    
+    const response = await client.send(command);
+
+    return response;
+};
+
+/**
+ * DynamoDBを作成する
+ * @param {*} tableInfo 
+ */
+const createTable = async function(tableInfo) {
+
+    // 取得したテーブル情報を用いて、テーブル作成用パラメータを生成
+    
+    const command = new CreateTableCommand({
+        AttributeDefinitions: tableInfo.Table.AttributeDefinitions,
+        BillingMode: 'PAY_PER_REQUEST',        
+        KeySchema: tableInfo.Table.KeySchema,
+        GlobalSecondaryIndexes: tableInfo.Table.GlobalSecondaryIndexes,
+        LocalSecondaryIndexes: tableInfo.Table.LocalSecondaryIndexes,
+        TableName: tableInfo.Table.TableName,
+    });
+
+    const response = await client.send(command);
+
+    return response;
+};

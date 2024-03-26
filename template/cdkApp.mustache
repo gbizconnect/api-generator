@@ -1,0 +1,18 @@
+#!/usr/bin/env node
+import 'source-map-support/register';
+import * as cdk from 'aws-cdk-lib';
+import { 
+{{#importFolder}}
+    S3BucketCsvStack, 
+{{/importFolder}}
+    ApiGatewayStack, 
+    S3BucketStack
+} from '../lib/cdk-stack';
+
+const app = new cdk.App();
+{{#importFolder}}
+const s3bucketcsv = new S3BucketCsvStack(app, "S3BucketCsvStack-{{apiNameAndVersion}}", {});
+{{/importFolder}}
+const apigateway = new ApiGatewayStack(app, "ApiGatewayStack-{{apiNameAndVersion}}", {});
+const s3bucket = new S3BucketStack(app, "S3BucketStack-{{apiNameAndVersion}}", {});
+

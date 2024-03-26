@@ -1,0 +1,84 @@
+const { DynamoDBClient, GetItemCommand, PutItemCommand } = require("@aws-sdk/client-dynamodb");
+const { marshall } = require("@aws-sdk/util-dynamodb");
+
+const DDB_TABLE = process.env['DDB_TABLE'];
+const config =  {region:  "ap-northeast-1"};
+const client = new DynamoDBClient(config);
+
+exports.handler = async(event, context, callback) => {
+
+    let responseBody = {
+        status: 500,
+        message: "Internal Server Error",
+    }
+
+    const body = JSON.parse(event.body);
+    
+    for (const key in body) {
+        if ({{#properties}}key !== '{{property_name}}' && {{/properties}}true) {
+            responseBody.status = 400;
+            responseBody.message = "invalid data";
+            return {
+                statusCode: responseBody.status,
+                body: JSON.stringify(responseBody),
+                headers: {'Access-Control-Allow-Origin': '*',}
+            };
+        }
+    }
+    
+
+    {{#properties}}
+    const {{ property_name }} = body.{{ property_name }};
+    {{/properties}}
+    {{{checkProgram}}}
+
+    try{
+        const inputGetItem = {
+            "Key": {
+    {{#properties}}
+        {{#isPrimaryKey}}
+                {{#isString}}"{{property_name}}": {"S": {{property_name}} },{{/isString}}
+                {{^isString}}"{{property_name}}": {"N": `${ {{property_name}} }`},{{/isString}}
+        {{/isPrimaryKey}}
+    {{/properties}}
+            },
+            "TableName": DDB_TABLE
+        }
+        
+        const commandGetItem = new GetItemCommand(inputGetItem);
+        const responseGetItem = await client.send(commandGetItem);
+        
+        if(responseGetItem.Item){
+            responseBody.status = 409;
+            responseBody.message = "already registered";
+            return {
+                statusCode: responseBody.status,
+                body: JSON.stringify(responseBody),
+                headers: {'Access-Control-Allow-Origin': '*',}
+            };
+        }
+    
+        const input = {
+            "Item": marshall(body),
+            "TableName": DDB_TABLE
+        }
+        
+        const command = new PutItemCommand(input);
+        const response = await client.send(command);
+        
+        responseBody.status = 200;
+        responseBody.message = "succeeded";
+        
+    }catch(e){
+        if(e.$response && e.$response.statusCode){
+            responseBody.status = e.$response.statusCode
+            responseBody.message = e.message;
+        }
+    }
+    
+    return {
+        statusCode: responseBody.status,
+        body: JSON.stringify(responseBody),
+        headers: {'Access-Control-Allow-Origin': '*',}
+    };
+}

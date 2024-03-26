@@ -1,0 +1,46 @@
+components:
+  schemas:
+    User:
+      type: object
+      properties:
+        - name: id
+          type: string
+          example: userId
+        - name: username
+          type: string
+          example: theUser
+        - name: email
+          type: string
+          example: mailaddress
+        - name: phone
+          type: integer
+          example: 12345678
+        - name: occupation
+          type: object
+          properties:
+            - name: occupationName
+              type: string
+              example: Software Engineer
+            - name: department
+              type: string
+              example: Engineering
+            - name: obj
+              type: object
+              properties:
+                - name: prop1
+                  type: string
+                - name: prop2
+                  type: integer
+      keys:
+        partition_key:
+          name: id
+        sort_key:
+          name: username
+        secondary_keys:
+          global_secondary_keys:
+            - index_name: global_index
+              partition_key: username
+              sort_key: email
+          local_secondary_keys:
+            - index_name: local_index
+              sort_key: username

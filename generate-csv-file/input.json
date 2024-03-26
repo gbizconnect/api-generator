@@ -1,0 +1,6 @@
+{
+  "id": {"type":"number","example": 1},
+  "username": {"type":"string","example": "user1"},
+  "email": {"type":"string","example": "user1@example.com"},
+  "phone": {"type":"string","example": "10000001"}
+}

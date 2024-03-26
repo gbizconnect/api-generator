@@ -1,0 +1,377 @@
+import * as cdk from "aws-cdk-lib";
+import { Construct } from "constructs";
+import * as apigateway from "aws-cdk-lib/aws-apigateway";
+import * as lambda from "aws-cdk-lib/aws-lambda";
+import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
+import * as iam from "aws-cdk-lib/aws-iam";
+import * as s3 from 'aws-cdk-lib/aws-s3';
+import { RemovalPolicy } from "aws-cdk-lib";
+import * as s3deploy from 'aws-cdk-lib/aws-s3-deployment';
+
+{{#importFolder}}
+export class S3BucketCsvStack extends cdk.Stack {
+  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+    super(scope, id, props);
+    
+    // s3バケット名
+    const s3BucketName = "s3bucketname-{{apiNameAndVersion}}-csv-file";
+    
+    // s3 bucket for csv
+    const bucket_for_csv = new s3.Bucket(this, s3BucketName, {
+        bucketName: s3BucketName,
+        removalPolicy: RemovalPolicy.DESTROY,
+        autoDeleteObjects: true
+    });
+
+    // データのアップロード
+    new s3deploy.BucketDeployment(this, 'DeployCsvFile', {
+        sources: [s3deploy.Source.asset('../../../../csv-file')],
+        destinationBucket: bucket_for_csv,
+        destinationKeyPrefix: 'csv-file/',
+        memoryLimit: 256,
+    });
+  }
+}
+{{/importFolder}}
+
+export class ApiGatewayStack extends cdk.Stack {
+
+  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+    super(scope, id, props);
+    
+    // AWSリソース名
+    const tableName = "dynamodb-{{apiNameAndVersion}}";
+    const registerLambdaName = "registerLambda-{{apiNameAndVersion}}";
+    const getRecordLambdaName = "getRecordLambda-{{apiNameAndVersion}}";
+    const searchFunctionName = "searchLambda-{{apiNameAndVersion}}";
+    const deleteAllLambdaName = "deleteAllLambda-{{apiNameAndVersion}}";
+    const deleteRecordLambdaName = "deleteRecordLambda-{{apiNameAndVersion}}";
+    const updateRecordLambdaName = "updateRecordLambda-{{apiNameAndVersion}}";
+    const updateRecordsLambdaName = "updateRecordsLambda-{{apiNameAndVersion}}";
+{{#isAuth}}
+    const authorizeLambdaName = "authorizeLambda-{{apiNameAndVersion}}";
+{{/isAuth}}
+    const restApiName = "restApi-{{apiNameAndVersion}}";
+
+    // s3バケット名
+    const s3BucketName = "s3bucketname-{{apiNameAndVersion}}-csv-file";
+    const bucket = s3.Bucket.fromBucketName(this, 'existingBucket', s3BucketName);
+
+    // dynamodbのテーブル
+    const table = new dynamodb.Table(this, tableName, {
+      tableName: tableName,
+      partitionKey: {
+        name: "{{pk.property}}", 
+        type: dynamodb.AttributeType.{{#pk.isString}}STRING{{/pk.isString}}{{^pk.isString}}NUMBER{{/pk.isString}} 
+      },
+      {{#isExistSortKey}}sortKey: {name: "{{sk.property}}",
+      type: dynamodb.AttributeType.{{#sk.isString}}STRING{{/sk.isString}}{{^sk.isString}}NUMBER{{/sk.isString}}},
+      {{/isExistSortKey}}
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+{{#importFolder}}
+      importSource: {
+        inputFormat: dynamodb.InputFormat.csv({
+          delimiter: ',',
+        }),
+        bucket,
+        keyPrefix: 'csv-file',
+      },
+{{/importFolder}}
+    });
+
+    //グローバルセカンダリインデックスの追加
+    {{#globalSecondarys}}
+    table.addGlobalSecondaryIndex({
+      indexName: "{{index_name}}",
+      partitionKey: {name: "{{partition_key}}", type: {{partition_key_type}}},
+      {{#sort_key}}
+      sortKey: {name: "{{sort_key}}", type: {{sort_key_type}}},
+      {{/sort_key}}
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+    {{/globalSecondarys}}
+
+    //ローカルセカンダリインデックスの追加
+{{^importFolder}}
+    {{#localSecondarys}}
+    table.addLocalSecondaryIndex({
+      indexName: "{{index_name}}",
+      sortKey: {name: "{{sort_key}}", type: {{sort_key_type}}},
+      projectionType: dynamodb.ProjectionType.ALL,
+    });
+    {{/localSecondarys}}
+{{/importFolder}}
+
+    // 3rd party library layer
+    const layer = new lambda.LayerVersion(this, "{{apiNameAndVersion}}", {
+      compatibleRuntimes: [
+        lambda.Runtime.NODEJS_20_X,
+      ],
+      code: lambda.Code.fromAsset('../../../../src/layers'),
+      description: 'Uses csv-parse, encoding-japanese, lambda-multipart-parser library',
+    });
+
+    // 1件登録Lambda
+    const registerLambda = new lambda.Function(this, registerLambdaName,{
+      functionName: registerLambdaName,
+      runtime: lambda.Runtime.NODEJS_20_X,
+      code: lambda.Code.fromAsset("lambda"),
+      handler: "registerLambda.handler",
+      environment: {DDB_TABLE: table.tableName,}
+    });
+    
+    // 1件参照Lambda
+    const getRecordLambda = new lambda.Function(this, getRecordLambdaName,{
+      functionName: getRecordLambdaName,
+      runtime: lambda.Runtime.NODEJS_20_X,
+      code: lambda.Code.fromAsset("lambda"),
+      handler: "getRecordLambda.handler",
+      environment: {DDB_TABLE: table.tableName,}
+    });
+    
+    // 検索Lambda
+    const searchFunction = new lambda.Function(this, searchFunctionName,{
+      functionName: searchFunctionName,
+      runtime: lambda.Runtime.NODEJS_20_X,
+      code: lambda.Code.fromAsset("lambda"),
+      handler: "searchLambda.handler",
+      timeout: cdk.Duration.seconds(29),
+      environment: {DDB_TABLE: table.tableName,}
+    });
+    
+    // 全件削除Lambda
+    const deleteAllLambda = new lambda.Function(this, deleteAllLambdaName, {
+      functionName: deleteAllLambdaName,
+      runtime: lambda.Runtime.NODEJS_20_X,
+      code: lambda.Code.fromAsset("lambda"),
+      handler: "deleteAllLambda.handler",
+      timeout: cdk.Duration.seconds(900),
+      environment: {DDB_TABLE: table.tableName,}
+    });
+
+    // 1件削除Lambda
+    const deleteRecordLambda = new lambda.Function(this, deleteRecordLambdaName, {
+      functionName: deleteRecordLambdaName,
+      runtime: lambda.Runtime.NODEJS_20_X,
+      code: lambda.Code.fromAsset("lambda"),
+      handler: "deleteRecordLambda.handler",
+      environment: {DDB_TABLE: table.tableName,}
+    });
+    
+    //1件更新Lambda
+    const updateRecordLambda = new lambda.Function(this,updateRecordLambdaName, {
+      functionName: updateRecordLambdaName,
+      runtime: lambda.Runtime.NODEJS_20_X,
+      code: lambda.Code.fromAsset("lambda"),
+      handler: "updateRecordLambda.handler",
+      environment: {DDB_TABLE: table.tableName,}
+    } );
+    
+    //複数件更新Lambda
+    const updateRecordsLambda = new lambda.Function(this,updateRecordsLambdaName, {
+      functionName: updateRecordsLambdaName,
+      runtime: lambda.Runtime.NODEJS_20_X,
+      code: lambda.Code.fromAsset("lambda"),
+      handler: "updateRecordsLambda.handler",
+      timeout: cdk.Duration.seconds(900),
+      environment: {DDB_TABLE: table.tableName,},
+      layers: [layer],
+    } );
+
+    // 読み取り・書き込み権限付与
+    table.grantReadWriteData(registerLambda);
+    table.grantReadData(getRecordLambda);
+    table.grantFullAccess(deleteAllLambda);
+    table.grantReadWriteData(deleteRecordLambda);
+    table.grantReadWriteData(updateRecordLambda);
+    table.grantReadWriteData(updateRecordsLambda);
+    
+    // partiQLの実行権限の付与
+    const dynamoDBPolicy = new iam.PolicyDocument({
+      statements: [
+        new iam.PolicyStatement({
+          actions: ['dynamodb:PartiQLSelect'],
+          resources: [table.tableArn, table.tableArn + '/index/*'],
+        }),
+      ],
+    });
+    
+    searchFunction.role?.attachInlinePolicy(new iam.Policy(this, 'DynamoDBPolicy', { document: dynamoDBPolicy }));
+    
+{{#isAuth}}
+    // 認証用Lambda
+    const authorizeLambda = new lambda.Function(this, authorizeLambdaName,{
+      functionName: authorizeLambdaName,
+      runtime: lambda.Runtime.NODEJS_16_X,
+      code: lambda.Code.fromAsset("lambda"),
+      handler: "authorizeLambda.handler",
+    });
+    
+    // Lambdaオーソライザ
+    const lambdaAuthorizer = new apigateway.RequestAuthorizer(this, "authorizer", {
+      authorizerName: "authorizer",
+      handler: authorizeLambda,
+      identitySources: [apigateway.IdentitySource.header('Authorization')],
+      resultsCacheTtl: cdk.Duration.hours(0),
+    });
+    
+{{/isAuth}}
+    // RestApi
+    const api = new apigateway.RestApi(this, restApiName, {
+      restApiName: restApiName,
+      binaryMediaTypes: ['multipart/form-data'],
+      defaultCorsPreflightOptions: {
+        allowOrigins: apigateway.Cors.ALL_ORIGINS,
+        allowMethods: apigateway.Cors.ALL_METHODS,
+        allowHeaders: apigateway.Cors.DEFAULT_HEADERS,
+      },
+    });
+    
+{{#isAuth}}
+    // レスポンスのテンプレート
+    const unauthorizedResponse = {status: 401,message: "Unauthorized"};
+    
+    // ゲートウェイのレスポンス
+    api.addGatewayResponse("unauthorizedResponse", {
+      type: apigateway.ResponseType.UNAUTHORIZED,
+      statusCode: "401",
+      responseHeaders: {
+        "Access-Control-Allow-Origin": "'*'",
+        "Access-Control-Allow-Headers": "'*'",
+        "Access-Control-Allow-Methods": "'*'",
+        "WWW-Authenticate": "\'" + "Basic" + "\'"
+      },
+      templates: {"application/json": JSON.stringify(unauthorizedResponse)}
+    });
+    
+{{/isAuth}}
+    
+    // APIGatewayのリソース・メソッド
+    const resource{{model}} = api.root.addResource("{{model}}");
+    resource{{model}}.addMethod("POST", new apigateway.LambdaIntegration(registerLambda), {
+{{#isAuthUpdate}}
+      authorizer: lambdaAuthorizer,
+{{/isAuthUpdate}}
+    });
+    resource{{model}}.addMethod("DELETE", new apigateway.LambdaIntegration(deleteAllLambda), {
+{{#isAuthUpdate}}
+      authorizer: lambdaAuthorizer,
+{{/isAuthUpdate}}
+    });
+    
+    const resource{{model}}PrimaryKey = resource{{model}}.addResource("{" + "{{pk.property}}" + "}"){{#isExistSortKey}}.addResource("{" + "{{sk.property}}" + "}"){{/isExistSortKey}};
+    resource{{model}}PrimaryKey.addMethod("GET", new apigateway.LambdaIntegration(getRecordLambda), {
+{{#isAuthRef}}
+      authorizer: lambdaAuthorizer,
+{{/isAuthRef}}
+    });
+    resource{{model}}PrimaryKey.addMethod("DELETE", new apigateway.LambdaIntegration(deleteRecordLambda), {
+{{#isAuthUpdate}}
+      authorizer: lambdaAuthorizer,
+{{/isAuthUpdate}}
+    });
+    resource{{model}}PrimaryKey.addMethod("PATCH", new apigateway.LambdaIntegration(updateRecordLambda), {
+{{#isAuthUpdate}}
+      authorizer: lambdaAuthorizer,
+{{/isAuthUpdate}}
+    });
+    
+    const resource{{model}}Search = resource{{model}}.addResource("search");
+    resource{{model}}Search.addMethod("POST", new apigateway.LambdaIntegration(searchFunction), {
+{{#isAuthRef}}
+      authorizer: lambdaAuthorizer,
+{{/isAuthRef}}
+    });
+    const resource{{model}}Import = resource{{model}}.addResource("import");
+    resource{{model}}Import.addMethod("POST", new apigateway.LambdaIntegration(updateRecordsLambda), {
+{{#isAuthUpdate}}
+      authorizer: lambdaAuthorizer,
+{{/isAuthUpdate}}
+    });
+
+    //Lambda リソースポリシーにアクセス許可を追加
+    registerLambda.addPermission("RegisterPermisson", {
+      principal: new iam.ServicePrincipal("apigateway.amazonaws.com"),
+      action: "lambda:InvokeFunction",
+      sourceArn: api.arnForExecuteApi(),
+    });
+    getRecordLambda.addPermission("GetRecordPermisson", {
+      principal: new iam.ServicePrincipal("apigateway.amazonaws.com"),
+      action: "lambda:InvokeFunction",
+      sourceArn: api.arnForExecuteApi(),
+    });
+    searchFunction.addPermission("SearchPermisson", {
+      principal: new iam.ServicePrincipal("apigateway.amazonaws.com"),
+      action: "lambda:InvokeFunction",
+      sourceArn: api.arnForExecuteApi(),
+    });
+    deleteAllLambda.addPermission("DeletePermisson", {
+      principal: new iam.ServicePrincipal("apigateway.amazonaws.com"),
+      action: "lambda:InvokeFunction",
+      sourceArn: api.arnForExecuteApi(),
+    });
+    deleteRecordLambda.addPermission("DeletePermisson", {
+      principal: new iam.ServicePrincipal("apigateway.amazonaws.com"),
+      action: "lambda:InvokeFunction",
+      sourceArn: api.arnForExecuteApi(),
+    });
+    updateRecordLambda.addPermission("DeletePermisson", {
+      principal: new iam.ServicePrincipal("apigateway.amazonaws.com"),
+      action: "lambda:InvokeFunction",
+      sourceArn: api.arnForExecuteApi(),
+    });
+    updateRecordsLambda.addPermission("DeletePermisson", {
+      principal: new iam.ServicePrincipal("apigateway.amazonaws.com"),
+      action: "lambda:InvokeFunction",
+      sourceArn: api.arnForExecuteApi(),
+    });
+{{#isAuth}}
+    authorizeLambda.addPermission("authorizePermisson", {
+      principal: new iam.ServicePrincipal("apigateway.amazonaws.com"),
+      action: "lambda:InvokeFunction",
+      sourceArn: api.arnForExecuteApi(),
+    });
+{{/isAuth}}
+  }
+}
+
+export class S3BucketStack extends cdk.Stack {
+  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+    super(scope, id, props);
+    
+    // s3バケット名
+    const s3BucketName = "s3bucketname-{{apiNameAndVersion}}";
+    
+    // s3 bucket for swaggerui
+    const bucket_for_swaggerui = new s3.Bucket(this, s3BucketName, {
+        bucketName: s3BucketName,
+        blockPublicAccess: new s3.BlockPublicAccess({ 
+            blockPublicAcls: true,
+            ignorePublicAcls: true,
+            blockPublicPolicy: false,
+            restrictPublicBuckets: false,
+        }),
+        websiteIndexDocument: 'index.html',
+        publicReadAccess: true,
+        removalPolicy: RemovalPolicy.DESTROY,
+        autoDeleteObjects: true
+    });
+
+    const policyStatement = new iam.PolicyStatement({
+        actions: ['s3:GetObject'],
+        effect: iam.Effect.ALLOW,
+        principals: [new iam.AnyPrincipal(),],
+        resources: [`${bucket_for_swaggerui.bucketArn}/*`],
+    });
+
+    bucket_for_swaggerui.addToResourcePolicy(policyStatement);
+    
+    // deploy swaggerui to s3 bucket.
+    new s3deploy.BucketDeployment(this, 'DeployWebsite', {
+        sources: [s3deploy.Source.asset('../swagger-ui/dist')],
+        destinationBucket: bucket_for_swaggerui,
+        destinationKeyPrefix: 'swaggerui',
+    });
+  }
+}
