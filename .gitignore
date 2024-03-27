@@ -27,3 +27,5 @@ dist-ssr
 # Api Generator files
 /apis/*
 /test/*
+
+!swagger-ui/dist

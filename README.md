@@ -119,6 +119,10 @@ npm installコマンドを実行して依存ライブラリをインストール
 ```sh
 cd api-generator
 npm install
+
+cd src/layers/nodejs
+npm install
+cd ../../../
 ```
 
 
@@ -301,11 +305,11 @@ npx ts-node api-ref.ts
     "Name": "address",
     "apiVersion": "1.0",
     "s3Bucket": {
-      "Name": "s3bucketname-address-1-0",
-      "ARN": "arn:aws:s3:::s3bucketname-address-1-0"
+      "Name": "xxxxxxxxxxxx-address-1-0",
+      "ARN": "arn:aws:s3:::xxxxxxxxxxxx-address-1-0"
     },
     "SwaggerUi": {
-      "Url": "https://xxxxx.s3bucketname-address-1-0.s3.ap-northeast-1.amazonaws.com/swaggerui/index.html"
+      "Url": "https://xxxxx.xxxxxxxxxxxx-address-1-0.s3.ap-northeast-1.amazonaws.com/swaggerui/index.html"
     },
     "table": {
       "Name": "dynamodb-address-1-3",
@@ -313,8 +317,8 @@ npx ts-node api-ref.ts
     },
     "apigateway": {
       "Name": "restApi-address-1-3",
-      "ARN": "arn:aws:apigateway:ap-northeast-1::/restapis/np0ozpsvcg",
-      "Url": "https://np0ozpsvcg.execute-api.ap-northeast-1.amazonaws.com/prod"
+      "ARN": "arn:aws:apigateway:ap-northeast-1::/restapis/xxxxxxxxxx",
+      "Url": "https://xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.com/prod"
     },
     "Lambda": {
       "authorizeFunc": {
@@ -457,7 +461,7 @@ an identity-based policy (Service: Iam, Status Code: 403, Request ID: *)" (Reque
 本製品（以下、「本ツール」という）は、Amazon Web Services（AWS）Cloud Development Kit（CDK）を使用してAWSのサービスを利用したREAT APIを構築するためのものです。本ツールを使用する前に、以下の免責事項をご確認ください。
 
 1. 一般的な使用<br>
-本ツールは、「現状有姿」で提供され、いかなる明示的または暗黙的な保証も伴いません。これには、商品性、特定目的への適合性、及び非侵害に関する保証が含まれますが、これに限定されません。本ツールの使用は完全にユーザーの自己責任において行われます。
+本ツールは、「現状有姿」で提供され、明示的または暗黙的な保証は伴いません。これには、商品性、特定目的への適合性、及び非侵害保証が含まれますが、これに限定されません。本ツールの使用はユーザーの自己責任であり、提供される機能を使用して行われるすべてのデータ操作およびその結果に対して、我々は責任を負いません。
 
 2. AWSサービスの利用<br>
 本ツールを使用して作成されたAWSリソースの管理、運用、および費用は、ユーザーの責任において行われます。AWSのサービス利用に関する費用や利用条件は、AWSの利用規約に準じます。本ツールは、AWSによるサービスの変更に伴い、予告なしに更新される場合があります。
@@ -469,4 +473,4 @@ an identity-based policy (Service: Iam, Status Code: 403, Request ID: *)" (Reque
 本ツールの使用によって生じた直接的、間接的、偶発的、特別、懲罰的、またはその他の損害に対して、本ツールの作者、貢献者、または関連する任意の当事者は責任を負わないものとします。これには、利益の損失、データの損失、業務の中断などが含まれますが、これに限定されません。
 
 5. 改訂<br>
-本免責事項は、予告なしに改訂される場合があります。本ツールを使用することで、ユーザーは本免責事項の最新版に拘束されることに同意したものとみなされます。
+本免責事項は予告なしに改訂される場合があります。本ツールを使用することで、ユーザーは本免責事項の最新版に同意したことになります。
